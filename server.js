@@ -1,6 +1,15 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
+const db = require('knex')({
+  client: 'pg',
+  connection: {
+    host: '127.0.0.1',
+    user: 'german',
+    password: '',
+    database: 'smart-brain'
+  }
+});
 
 const app = express();
 
@@ -43,39 +52,53 @@ app.post('/signin', (req, res) => {
 
 app.post('/register', (req, res) => {
   const { email, name, password } = req.body;
-  bcrypt.hash(password, 10, function (err, hash) {
-    console.log(hash);
-  });
-
-  database.users.push({
-    id: '125',
-    name: name,
-    email: email,
-    entries: 0,
-    joined: new Date()
-  });
-
-  res.json(database.users[database.users.length - 1]);
+  bcrypt.hash(password, 10)
+    .then(hash => {
+      console.log(hash);
+      return db.transaction(trx => {
+        return trx('login')
+          .insert({ hash, email })
+          .returning('email')
+          .then(loginEmail => {
+            return trx('users')
+              .insert({
+                name: name,
+                email: loginEmail[0],
+                joined: new Date()
+              })
+              .returning('*');
+          });
+      });
+    })
+    .then(user => {
+      res.json(user[0]);
+    })
+    .catch(err => res.status(400).json('unable to register'));;
 });
 
 app.get('/profile/:id', (req, res) => {
   const { id } = req.params;
-  database.users.forEach(user => {
-    if (user.id === id) {
-      return res.json(user);
-    }
-  });
+  db.select('*').from('users')
+    .where({ id })
+    .then(user => {
+      if (user.length) {
+        res.json(user[0]);
+      } else {
+        res.status(400).json('Not found');
+      }
+    })
+    .catch(err => res.status(400).json('error getting user'));
 });
 
 app.put('/image', (req, res) => {
   const { id } = req.body;
-  console.log(id);
-  database.users.forEach(user => {
-    if (user.id === id) {
-      user.entries++;
-      return res.json(user.entries);
-    }
-  });
+  db('users').where('id', '=', id)
+    .increment('entries', 1)
+    .returning('entries')
+    .then(entries => {
+      res.json(entries[0]);
+    })
+    .catch(err => res.status(400).json('unable to get entries'));
 });
 
 app.listen(3000, () => {
