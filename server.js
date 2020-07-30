@@ -13,41 +13,26 @@ const db = require('knex')({
 
 const app = express();
 
-const database = {
-  users: [
-    {
-      id: '123',
-      name: 'John',
-      email: 'john@gmail.com',
-      password: 'cookies',
-      entries: 0,
-      joined: new Date()
-    },
-    {
-      id: '1233',
-      name: 'Sally',
-      email: 'sally@gmail.com',
-      password: 'bananas',
-      entries: 0,
-      joined: new Date()
-    }
-  ]
-};
-
 app.use(express.json());
 app.use(cors());
 
-app.get('/', (req, res) => {
-  res.send(database.users);
-});
-
 app.post('/signin', (req, res) => {
-  if (req.body.email === database.users[0].email &&
-    req.body.password === database.users[0].password) {
-    res.json(database.users[0]);
-  } else {
-    res.status(400).json('error logging in');
-  }
+  db.select('email', 'hash').from('login')
+    .where('email', '=', req.body.email)
+    .then(data => {
+      return bcrypt.compare(req.body.password, data[0].hash);
+    })
+    .then(isValid => {
+      if (isValid) {
+        return db.select('*').from('users').where('email', '=', req.body.email);
+      } else {
+        throw new Error();
+      }
+    })
+    .then(user => {
+      res.json(user[0]);
+    })
+    .catch(err => res.status(400).json('unable to get user'));
 });
 
 app.post('/register', (req, res) => {
