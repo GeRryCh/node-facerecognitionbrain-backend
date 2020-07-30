@@ -11,69 +11,18 @@ const db = require('knex')({
   }
 });
 
+const register = require('./controllers/register');
+const signin = require('./controllers/signin');
+const profile = require('./controllers/profile');
+
 const app = express();
 
 app.use(express.json());
 app.use(cors());
 
-app.post('/signin', (req, res) => {
-  db.select('email', 'hash').from('login')
-    .where('email', '=', req.body.email)
-    .then(data => {
-      return bcrypt.compare(req.body.password, data[0].hash);
-    })
-    .then(isValid => {
-      if (isValid) {
-        return db.select('*').from('users').where('email', '=', req.body.email);
-      } else {
-        throw new Error();
-      }
-    })
-    .then(user => {
-      res.json(user[0]);
-    })
-    .catch(err => res.status(400).json('unable to get user'));
-});
-
-app.post('/register', (req, res) => {
-  const { email, name, password } = req.body;
-  bcrypt.hash(password, 10)
-    .then(hash => {
-      console.log(hash);
-      return db.transaction(trx => {
-        return trx('login')
-          .insert({ hash, email })
-          .returning('email')
-          .then(loginEmail => {
-            return trx('users')
-              .insert({
-                name: name,
-                email: loginEmail[0],
-                joined: new Date()
-              })
-              .returning('*');
-          });
-      });
-    })
-    .then(user => {
-      res.json(user[0]);
-    })
-    .catch(err => res.status(400).json('unable to register'));;
-});
-
-app.get('/profile/:id', (req, res) => {
-  const { id } = req.params;
-  db.select('*').from('users')
-    .where({ id })
-    .then(user => {
-      if (user.length) {
-        res.json(user[0]);
-      } else {
-        res.status(400).json('Not found');
-      }
-    })
-    .catch(err => res.status(400).json('error getting user'));
-});
+app.post('/signin', (req, res) => { signin.handleSignin(req, res, db, bcrypt); });
+app.post('/register', (req, res) => { register.handleRegister(req, res, db, bcrypt); });
+app.get('/profile/:id', (req, res) => { profile.handleProfile(req, res, db); });
 
 app.put('/image', (req, res) => {
   const { id } = req.body;
